@@ -319,6 +319,7 @@ class InsertMode:
         btn.grid(row=1, column=0, columnspan=1, sticky="W")
         btn.bind('<Button-1>', welcome)
         root.bind('<Return>', welcome)
+        self.score = 0
     
     def __init__(self):
         self.content = initialize_files(self)
@@ -411,6 +412,7 @@ class TestMode:
         btn.grid(row=1, column=0, columnspan=1, sticky="W")
         btn.bind('<Button-1>', welcome)
         root.bind('<Return>', welcome)
+        self.score = 0
 
     def __init__(self):
         self.content = initialize_files(self)
