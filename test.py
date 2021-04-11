@@ -5,47 +5,121 @@ root = Tk()
 root.title("~quiz~")
 root.geometry("500x300")
 
-chapter_numbers = []
+class Data:
+    chapter_numbers = []
+    player_database  = {}
+    keys = []
+    vals = []
+    leaderboard_info = {}
 
-player_database  = {}
-PD = open('data/users.txt')
-for line in PD.readlines():
-    nickname, chapter, code = line.split()
-    chapter = int(chapter)
-    chapter_numbers.append(chapter)
-    progress = []
-    for i in range(30):
-        progress.append([int(code[3 * i + j]) for j in range(3)])
-    player_database[nickname] = progress
+    def __init__(self):
+        PD = open('data/users.txt')
+        for line in PD.readlines():
+            nick, chapter, code = line.split()
+            self.chapter_numbers.append(int(chapter))
+            progress = []
+            for i in range(30):
+                progress.append([int(code[3 * i + j]) for j in range(3)])
+            self.player_database[nick] = progress
 
-keys = list(player_database.keys())
-vals = [sum(map(sum,player_database[user])) for user in player_database]
-leaderboard_info = {keys[i] : vals[i] for i in range(len(player_database))}
+        self.keys = list(self.player_database.keys())
+        self.vals = [sum(map(sum,self.player_database[user])) for user in self.player_database]
+        self.leaderboard_info = {self.keys[i] : self.vals[i] for i in range(len(self.player_database))}
 
-user_id = 0
-nickname = ''
-chapter_number = 0
-set_chapter_number = StringVar()
-chapter_progress = [0, 0, 0]
-user_lvl = 0
+    def leaderboard(self, event, user, chapter_number, data):
+        user.update_userlog(chapter_number, data)
+        lb = Toplevel()
+        lb.geometry("300x500")
+        lb.wm_title("Leaderboard")
+        ind = 0
+        for name in dict(sorted(self.leaderboard_info.items(), key=lambda item: item[1])[::-1]):
+            lab1 = Label(lb, text=name, font='Courier 14')
+            lab2 = Label(lb, text=self.leaderboard_info[name], font='Courier 14')
+            lab1.grid(row=ind, column=0)
+            lab2.grid(row=ind, column=1)
+            ind += 1
 
-def initialize_chapter():
-    global chapter_number, set_chapter_number, chapter_progress
-    set_chapter_number.set(str(chapter_number))
-    chapter_progress = chapter_progress = player_database[nickname][chapter_number - 1]
+        btn = Button(lb, text="Okay", command=lb.destroy)
+        btn.grid(row=ind, column=0)
 
-def initialize_files(mode):
-    mode.counter = 0
+class User:
+    user_id = 0
+    nickname = ''
 
-    ru_path = 'data/chapter' + str(chapter_number) + '/ru.txt'
-    en_path = 'data/chapter' + str(chapter_number) + '/en.txt'
-    an_path = 'data/chapter' + str(chapter_number) + '/an.txt'
-    rus = [row.strip() for row in open(ru_path)]
-    eng = [row.strip() for row in open(en_path)]
-    ann = [row.strip() for row in open(an_path)]
+    def login(self, event, ent, user, chapter, data):
+        self.nickname = ent.get()
+        self.user_id = chapter.initialize_chapter(self.nickname, data)
+        welcome(None, user, chapter, data)
+    
+    def update_userlog(self, chapter_number, data):
+        with open('data/users.txt', 'r') as file:
+            file_copy = file.readlines()
+            file.close()
+        
+        if self.user_id >= len(file_copy):
+            file_copy.append([])
+        
+        file_copy[self.user_id] = self.nickname + ' ' + str(chapter_number) + ' '
+        for chapter in data.player_database[self.nickname]:
+            for task in chapter:
+                file_copy[self.user_id] += str(task)
+        file_copy[self.user_id] += '\n'
 
-    mode.words_number = len(rus)
-    return [rus, eng, ann]
+        with open('data/users.txt', 'w') as file:
+            file.writelines(file_copy)
+            file.close()
+
+    def finish(self, event, user, chapter_number, data):
+        user.update_userlog(chapter_number, data)
+        exit()
+
+class Chapter:
+    chapter_number = 0
+    set_chapter_number = StringVar()
+    chapter_progress = [0, 0, 0]
+
+    def initialize_chapter(self, nickname, data):
+        ind = 0
+        for key in data.player_database:
+            if key == nickname:
+                self.chapter_progress = data.player_database[nickname][self.chapter_number - 1]
+                self.chapter_number = data.chapter_numbers[ind]
+                break
+            ind += 1
+        if ind == len(data.player_database):
+            data.player_database[nickname] = [[0 for i in range(3)] for j in range(30)]
+            self.chapter_progress = [0, 0, 0]
+            self.chapter_number = 1
+        return ind
+
+    def update_chapter(self, nickname, data):
+        self.set_chapter_number.set(str(self.chapter_number))
+        self.chapter_progress = data.player_database[nickname][self.chapter_number - 1]
+
+    def initialize_files(self, mode):
+        mode.counter = 0
+
+        ru_path = 'data/chapter' + str(self.chapter_number) + '/ru.txt'
+        en_path = 'data/chapter' + str(self.chapter_number) + '/en.txt'
+        an_path = 'data/chapter' + str(self.chapter_number) + '/an.txt'
+        rus = [row.strip() for row in open(ru_path)]
+        eng = [row.strip() for row in open(en_path)]
+        ann = [row.strip() for row in open(an_path)]
+
+        mode.words_number = len(rus)
+        return [rus, eng, ann]
+
+    def next_chapter(self, event, user, chapter, data):
+        if self.chapter_number < 30:
+            data.player_database[user.nickname][self.chapter_number - 1] = self.chapter_progress
+            self.chapter_number += 1
+            welcome(None, user, chapter, data)
+        
+    def prev_chapter(self, event, user, chapter, data):
+        if self.chapter_number > 1:
+            data.player_database[user.nickname][self.chapter_number - 1] = self.chapter_progress
+            self.chapter_number -= 1
+            welcome(None, user, chapter, data)
 
 def clear(window):
     _list = window.winfo_children()
@@ -59,55 +133,36 @@ def clear(window):
     window.unbind_all('<Escape>')
     window.unbind_all('<Return>')
 
-def authorize():
+def authorize(user, chapter, data):
     lab = Label(root, text='Enter your nickname: ', font='Courier 14')
     ent = Entry(root, font='Courier 14', width=14)
     btn = Button(root, width=8, height=1, text='Log in', font='Courier 14')
     lab.grid(row=0, column=0, columnspan=1)
     ent.grid(row=0, column=1, columnspan=1)
     btn.grid(row=1, column=0, columnspan=1)
-    btn.bind('<Button-1>', lambda event: login(event, ent))
-    root.bind('<Return>', lambda event: login(event, ent))
+    btn.bind('<Button-1>', lambda event: user.login(event, ent, user, chapter, data))
+    root.bind('<Return>', lambda event: user.login(event, ent, user, chapter, data))
     ent.focus()
 
-def login(event, ent):
-    global chapter_progress, nickname, user_id, chapter_number
-    nickname = ent.get()
-    ind = 0
-    for key in player_database:
-        if key == nickname:
-            chapter_progress = player_database[nickname][chapter_number - 1]
-            chapter_number = chapter_numbers[ind]
-            break
-        ind += 1
-    if ind == len(player_database):
-        player_database[nickname] = [[0 for i in range(3)] for j in range(30)]
-        chapter_progress = [0, 0, 0]
-        chapter_number = 1
-    user_id = ind
-
-    welcome(None)
-
-def welcome(event):
-    global set_chapter_number
+def welcome(event, user, chapter, data):
     clear(root)
-    initialize_chapter()
+    chapter.update_chapter(user.nickname, data)
     lab1 = Label(root, text='Welcome! This is a word practice game.', font='Courier 14')
-    btn1 = Button(root, width=8, height=1, text='Learn', font='Courier 14', background=('light green' if chapter_progress[0] else 'light blue'))
-    btn2 = Button(root, width=8, height=1, text='Insert', font='Courier 14', background=('light green' if chapter_progress[1] else 'light blue'))
-    btn3 = Button(root, width=8, height=1, text='Test', font='Courier 14', background=('light green' if chapter_progress[2] else 'light blue'))
+    btn1 = Button(root, width=8, height=1, text='Learn', font='Courier 14', background=('light green' if chapter.chapter_progress[0] else 'light blue'))
+    btn2 = Button(root, width=8, height=1, text='Insert', font='Courier 14', background=('light green' if chapter.chapter_progress[1] else 'light blue'))
+    btn3 = Button(root, width=8, height=1, text='Test', font='Courier 14', background=('light green' if chapter.chapter_progress[2] else 'light blue'))
     lab2 = Label(root, text='Current chapter: ', font='Courier 14')
-    if chapter_number > 1:
+    if chapter.chapter_number > 1:
         btn4 = Button(root, width=4, height=1, text='<<', font='Courier 14')
         btn4.grid(row=3, column=0, columnspan=1)
-        btn4.bind('<Button-1>', prev_chapter)
-        root.bind('<Left>', prev_chapter)
-    lab3 = Label(root, textvariable=set_chapter_number, font='Courier 14')
-    if chapter_number < 30:
+        btn4.bind('<Button-1>', lambda event: chapter.prev_chapter(event, user, chapter, data))
+        root.bind('<Left>', lambda event: chapter.prev_chapter(event, user, chapter, data))
+    lab3 = Label(root, textvariable=chapter.set_chapter_number, font='Courier 14')
+    if chapter.chapter_number < 30:
         btn5 = Button(root, width=4, height=1, text='>>', font='Courier 14')
         btn5.grid(row=3, column=2, columnspan=1)
-        btn5.bind('<Button-1>', next_chapter)
-        root.bind('<Right>', next_chapter)
+        btn5.bind('<Button-1>', lambda event: chapter.next_chapter(event, user, chapter, data))
+        root.bind('<Right>', lambda event: chapter.next_chapter(event, user, chapter, data))
     btn6 = Button(root, width=8, height=1, text='Exit', font='Courier 14')
     btn7 = Button(root, height=1, text='See the leaderboard', font='Courier 14')
 
@@ -120,60 +175,35 @@ def welcome(event):
     btn6.grid(row=4, column=0, columnspan=1)
     btn7.grid(row=4, column=1, columnspan=2)
     
-    btn1.bind('<Button-1>', learn)
-    btn2.bind('<Button-1>', insert)
-    btn3.bind('<Button-1>', test)
-    btn6.bind('<Button-1>', finish)
-    root.bind('<Escape>', finish)
-    btn7.bind('<Button-1>', leaderboard)
+    btn1.bind('<Button-1>', lambda event: LearnMode(event, user, chapter, data))
+    btn2.bind('<Button-1>', lambda event: InsertMode(event, user, chapter, data))
+    btn3.bind('<Button-1>', lambda event: TestMode(event, user, chapter, data))
+    btn6.bind('<Button-1>', lambda event: user.finish(event, user, chapter.chapter_number, data))
+    root.bind('<Escape>', lambda event: user.finish(event, user, chapter.chapter_number, data))
+    btn7.bind('<Button-1>', lambda event: data.leaderboard(event, user, chapter.chapter_number, data))
 
-def leaderboard(event):
-    update_file
-    lb = Toplevel()
-    lb.geometry("300x500")
-    lb.wm_title("Leaderboard")
-    ind = 0
-    for user in dict(sorted(leaderboard_info.items(), key=lambda item: item[1])[::-1]):
-        lab1 = Label(lb, text=user, font='Courier 14')
-        lab2 = Label(lb, text=leaderboard_info[user], font='Courier 14')
-        lab1.grid(row=ind, column=0)
-        lab2.grid(row=ind, column=1)
-        ind += 1
-
-    btn = Button(lb, text="Okay", command=lb.destroy)
-    btn.grid(row=ind, column=0)
-
-def next_chapter(event):
-    global chapter_number, root
-    if chapter_number < 30:
-        player_database[nickname][chapter_number - 1] = chapter_progress
-        chapter_number += 1
-        welcome(None)
-    
-def prev_chapter(event):
-    global chapter_number, root
-    if chapter_number > 1:
-        player_database[nickname][chapter_number - 1] = chapter_progress
-        chapter_number -= 1
-        welcome(None)
-
-def learn(event):
-    learner = LearnMode
-    LearnMode.__init__(learner)
-
-def insert(event):
-    inserter = InsertMode
-    InsertMode.__init__(inserter)
-
-def test(event):
-    tester = TestMode
-    TestMode.__init__(tester)
-
-class LearnMode:
-    global chapter_number, initialize_files, clear, root, welcome
+class AbstractMode:
+    user = 0
+    chapter = 0
+    data = 0
     counter = 0
     words_number = 0
     content = []
+    hints_taken = 0
+    failed_attempts = 0
+    counter = 0
+    score = 0
+    temp_score = 0
+    trans = ''
+    def __init__(self, event, user, chapter, data):
+        self.content = chapter.initialize_files(self)
+        self.initialize_word()
+        self.main()
+        self.user = user
+        self.chapter = chapter
+        self.data = data
+
+class LearnMode(AbstractMode):
     set_word = StringVar()
     set_trans = StringVar()
     set_context = StringVar()
@@ -198,22 +228,22 @@ class LearnMode:
         self.lab2.grid(row=1, column=0, sticky="W")
         self.lab3.grid(row=2, column=0, sticky="W")
         self.btn1.grid(row=3, column=0, sticky="W")
-        self.btn1.bind('<Button-1>', lambda event: self.next(self, event))
+        self.btn1.bind('<Button-1>', lambda event: self.next(event))
         self.btn2.grid(row=3, column=0, sticky="W")
-        self.btn2.bind('<Button-1>', welcome)
-        root.bind('<Return>', lambda event: self.next(self, event))
-        root.bind('<Escape>', welcome)
+        self.btn2.bind('<Button-1>', lambda event: welcome(event, self.user, self.chapter, self.data))
+        root.bind('<Return>', lambda event: self.next(event))
+        root.bind('<Escape>', lambda event: welcome(event, self.user, self.chapter, self.data))
 
     def next(self, event):
         self.counter += 1
         if self.counter == self.words_number:
-            self.finalize(self)
+            self.finalize()
         else:
-            self.initialize_word(self)
-            self.main(self)
+            self.initialize_word()
+            self.main()
 
     def finalize(self):
-        chapter_progress[0] = 1
+        self.chapter.chapter_progress[0] = 1
         clear(root)
         lab1 = Label(root, text='Congrats, you have learnt ', font='Courier 14')
         lab2 = Label(root, text=str(self.words_number) + ' words!', font='Courier 14')
@@ -221,24 +251,10 @@ class LearnMode:
         lab2.grid(row=1, column=0, columnspan=1)
         btn = Button(root, width=15, height=1, text='Back to menu', font='Courier 14')
         btn.grid(row=2, column=1, columnspan=1)
-        btn.bind('<Button-1>', welcome)
-        root.bind('<Return>', welcome)
-    
-    def __init__(self):
-        self.content = initialize_files(self)
-        self.initialize_word(self)
-        self.main(self)
+        btn.bind('<Button-1>', lambda event: welcome(event, self.user, self.chapter, self.data))
+        root.bind('<Return>', lambda event: welcome(event, self.user, self.chapter, self.data))
 
-class InsertMode:
-    global chapter_number, initialize_files, clear, root, welcome
-    hints_taken = 0
-    failed_attempts = 0
-    counter = 0
-    score = 0
-    temp_score = 0
-    trans = ''
-    words_number = 0
-    content = []
+class InsertMode(AbstractMode):
     set_word = StringVar()
     set_trans = StringVar()
     set_context = StringVar()
@@ -273,11 +289,11 @@ class InsertMode:
         self.btn1.grid(row=2, column=0, sticky="W")
         self.btn2.grid(row=2, column=1, sticky="W")
         self.btn3.grid(row=3, column=0, sticky="W")
-        self.btn1.bind('<Button-1>', lambda event: self.hint(self, event))
-        self.btn2.bind('<Button-1>', lambda event: self.next(self, event))
-        self.btn3.bind('<Button-1>', welcome)
-        root.bind('<Return>', lambda event: self.next(self, event))
-        root.bind('<Escape>', welcome)
+        self.btn1.bind('<Button-1>', lambda event: self.hint(event))
+        self.btn2.bind('<Button-1>', lambda event: self.next(event))
+        self.btn3.bind('<Button-1>', lambda event: welcome(event, self.user, self.chapter, self.data))
+        root.bind('<Return>', lambda event: self.next(event))
+        root.bind('<Escape>', lambda event: welcome(event, self.user, self.chapter, self.data))
         self.ent.focus()
 
     def hint(self, event):
@@ -294,10 +310,10 @@ class InsertMode:
                 self.score += self.temp_score
             self.counter += 1
             if self.counter < self.words_number:
-                self.initialize_word(self)
-                self.main(self)
+                self.initialize_word()
+                self.main()
             else:
-                self.finalize(self)
+                self.finalize()
         else:
             if self.failed_attempts < 3:
                 self.failed_attempts += 1
@@ -311,34 +327,21 @@ class InsertMode:
             
     def finalize(self):
         if self.score >= 0.8 * self.words_number:
-            chapter_progress[1] = 1
+            self.chapter.chapter_progress[1] = 1
         clear(root)
         lab = Label(root, text='Your score from '+str(self.words_number)+': ' + str(round(self.score, 1)), font='Courier 14')
         lab.grid(row=0, column=0)
         btn = Button(root, width=15, height=1, text='Back to menu', font='Courier 14')
         btn.grid(row=1, column=0, columnspan=1, sticky="W")
-        btn.bind('<Button-1>', welcome)
-        root.bind('<Return>', welcome)
+        btn.bind('<Button-1>', lambda event: welcome(event, self.user, self.chapter, self.data))
+        root.bind('<Return>', lambda event: welcome(event, self.user, self.chapter, self.data))
         self.score = 0
-    
-    def __init__(self):
-        self.content = initialize_files(self)
-        self.initialize_word(self)
-        self.main(self)
 
-class TestMode:
-    global chapter_number, initialize_files, clear, root, welcome
-    hints_taken = 0
-    failed_attempts = 0
-    counter = 0
-    score = 0
-    temp_score = 0
-    trans = ''
-    words_number = 0
-    content = []
+class TestMode(AbstractMode):
     set_word = StringVar()
     set_trans = StringVar()
-    lab = Label(root, textvariable=set_word, font='Courier 14')
+    set_context = StringVar()
+    lab = Label(root,textvariable=set_word, font='Courier 14')
     ent = Entry(root,font='Courier 14', width=14)
     btn1 = Button(root, width=4, height=1, text='Hint', font='Courier 14')
     btn2 = Button(root, width=4, height=1, text='>>', font='Courier 14')
@@ -365,11 +368,11 @@ class TestMode:
         self.btn1.grid(row=1, column=0, sticky="W")
         self.btn2.grid(row=1, column=1, sticky="W")
         self.btn3.grid(row=2, column=0, sticky="W")
-        self.btn1.bind('<Button-1>', lambda event: self.hint(self, event))
-        self.btn2.bind('<Button-1>', lambda event: self.next(self, event))
-        self.btn3.bind('<Button-1>', welcome)
-        root.bind('<Return>', lambda event: self.next(self, event))
-        root.bind('<Escape>', welcome)
+        self.btn1.bind('<Button-1>', lambda event: self.hint(event))
+        self.btn2.bind('<Button-1>', lambda event: self.next(event))
+        self.btn3.bind('<Button-1>', lambda event: welcome(event, self.user, self.chapter, self.data))
+        root.bind('<Return>', lambda event: self.next(event))
+        root.bind('<Escape>', lambda event: welcome(event, self.user, self.chapter, self.data))
         self.ent.focus()
 
     def hint(self, event):
@@ -387,10 +390,10 @@ class TestMode:
                 self.score += self.temp_score
             self.counter += 1
             if self.counter < self.words_number:
-                self.initialize_word(self)
-                self.main(self)
+                self.initialize_word()
+                self.main()
             else:
-                self.finalize(self)
+                self.finalize()
         else:
             if self.failed_attempts < 3:
                 self.failed_attempts += 1
@@ -404,41 +407,17 @@ class TestMode:
                 
     def finalize(self):
         if self.score >= 0.8 * self.words_number:
-            chapter_progress[1] = 1
+            self.chapter.chapter_progress[1] = 1
         clear(root)
         lab = Label(root, text='Your score from '+str(self.words_number)+': ' + str(round(self.score, 1)), font='Courier 14')
         lab.grid(row=0, column=0)
         btn = Button(root, width=15, height=1, text='Back to menu', font='Courier 14')
         btn.grid(row=1, column=0, columnspan=1, sticky="W")
-        btn.bind('<Button-1>', welcome)
-        root.bind('<Return>', welcome)
+        btn.bind('<Button-1>', lambda event: welcome(event, self.user, self.chapter, self.data))
+        root.bind('<Return>', lambda event: welcome(event, self.user, self.chapter, self.data))
         self.score = 0
 
-    def __init__(self):
-        self.content = initialize_files(self)
-        self.initialize_word(self)
-        self.main(self)
-
-def update_file():
-    with open('data/users.txt', 'r') as file:
-        file_copy = file.readlines()
-        file.close()
-    
-    if user_id >= len(file_copy):
-        file_copy.append([])
-    
-    file_copy[user_id] = nickname + ' ' + str(chapter_number) + ' '
-    for chapter in player_database[nickname]:
-        for task in chapter:
-            file_copy[user_id] += str(task)
-    file_copy[user_id] += '\n'
-
-    with open('data/users.txt', 'w') as file:
-        file.writelines(file_copy)
-        file.close()
-
-def finish(event):
-    update_file()
-    exit()
-
-authorize()
+user = User()
+chapter = Chapter()
+data = Data()
+authorize(user, chapter, data)
