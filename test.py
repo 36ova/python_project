@@ -13,8 +13,8 @@ class Data:
     vals = []
     leaderboard_info = {}
 
-    def __init__(self):
-        with open('data/users.txt') as PD:
+    def __init__(self, PATH):
+        with open(PATH) as PD:
             for line in PD.readlines():
                 nick, chapter, code = line.split()
                 self.chapter_numbers.append(int(chapter))
@@ -443,7 +443,7 @@ class TestMode(AbstractMode):
 def main():
     user = User()
     chapter = Chapter()
-    data = Data()
+    data = Data('data/users.txt')
     authorize(user, chapter, data)
 
 if __name__ == "__main__":
